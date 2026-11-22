@@ -125,29 +125,40 @@ class AudioCaptureManager(
     }
 
     private fun recordLoop(record: AudioRecord) {
+        val headerSize = 16
+        val magic = 0x504D4943 // "PMIC"
         val shortBuffer = ShortArray(chunkSamples)
-        val byteBuffer = ByteBuffer.allocate(chunkBytes).order(ByteOrder.LITTLE_ENDIAN)
+        val packetBuffer = ByteBuffer.allocate(headerSize + chunkBytes)
         val silenceBytes = ByteArray(chunkBytes) // all zeros
 
         var frameCounter = 0
+        var sequenceNumber = 0
 
         while (isRecording) {
             val shortsRead = record.read(shortBuffer, 0, chunkSamples)
             if (shortsRead <= 0) continue
 
+            packetBuffer.clear()
+            // Write 16-byte header: Magic(4) + Seq(4) + Timestamp(8)
+            packetBuffer.order(ByteOrder.BIG_ENDIAN)
+            packetBuffer.putInt(magic)
+            packetBuffer.putInt(sequenceNumber++)
+            packetBuffer.putLong(System.currentTimeMillis())
+
             if (isMuted) {
                 // When muted, send silence packets to keep UDP pacing steady
-                sender.send(silenceBytes, chunkBytes)
+                packetBuffer.put(silenceBytes)
+                sender.send(packetBuffer.array(), headerSize + chunkBytes)
                 if (++frameCounter % 5 == 0) {
                     onDbUpdate(-96f)
                 }
                 continue
             }
 
-            // Apply gain and calculate RMS
+            // Write PCM payload in Little Endian
+            packetBuffer.order(ByteOrder.LITTLE_ENDIAN)
             val currentGain = gain
             var sumSquare = 0.0
-            byteBuffer.clear()
 
             for (i in 0 until shortsRead) {
                 var sample = shortBuffer[i].toFloat()
@@ -156,12 +167,12 @@ class AudioCaptureManager(
                     sample = max(-32768f, min(32767f, sample))
                 }
                 val sShort = sample.toInt().toShort()
-                byteBuffer.putShort(sShort)
+                packetBuffer.putShort(sShort)
                 sumSquare += sShort * sShort
             }
 
-            // Send processed PCM bytes
-            sender.send(byteBuffer.array(), shortsRead * 2)
+            // Send processed PCM bytes with header
+            sender.send(packetBuffer.array(), headerSize + shortsRead * 2)
 
             // Update RMS dB level (~20 times a second)
             if (++frameCounter % 5 == 0) {
