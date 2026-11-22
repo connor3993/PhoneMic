@@ -69,25 +69,14 @@ class AudioCaptureManager(
         val bufferSize = max(minBufferSize, chunkBytes * 4)
 
         try {
+            // Use standard MIC instead of VOICE_COMMUNICATION to avoid triggering Android's Bluetooth call routing to PC
             audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                MediaRecorder.AudioSource.MIC,
                 sampleRate,
                 channelConfig,
                 audioFormat,
                 bufferSize
             )
-
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                // Fallback to standard MIC if VOICE_COMMUNICATION fails
-                audioRecord?.release()
-                audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    channelConfig,
-                    audioFormat,
-                    bufferSize
-                )
-            }
 
             val record = audioRecord ?: return false
             if (record.state != AudioRecord.STATE_INITIALIZED) {

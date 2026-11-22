@@ -77,18 +77,28 @@ def list_and_select_device(cli_device_idx=None):
 
     keywords = ["cable input", "virtual audio", "cable-a", "cable-b", "sonar - microphone", "voicemeeter"]
 
+    # Look for virtual cable devices, strongly preferring Windows WASAPI over legacy MME
+    wasapi_candidates = []
+    other_candidates = []
+
     for idx, dev in enumerate(devices):
         if dev['max_output_channels'] > 0:
             api_name = hostapis[dev['hostapi']]['name']
             name = dev['name']
             output_devices.append((idx, name, api_name, dev['max_output_channels']))
             
-            # Check if it matches virtual cable keywords
-            if recommended_idx is None:
-                for kw in keywords:
-                    if kw in name.lower():
-                        recommended_idx = idx
-                        break
+            for kw in keywords:
+                if kw in name.lower():
+                    if api_name == "Windows WASAPI":
+                        wasapi_candidates.append(idx)
+                    else:
+                        other_candidates.append(idx)
+                    break
+
+    if wasapi_candidates:
+        recommended_idx = wasapi_candidates[0]
+    elif other_candidates:
+        recommended_idx = other_candidates[0]
 
     if cli_device_idx is not None:
         try:
