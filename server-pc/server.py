@@ -108,30 +108,8 @@ def list_and_select_device(cli_device_idx=None):
         except Exception:
             pass
 
-    table = Table(title="[bold cyan]可用的音频输出设备列表[/bold cyan]", show_header=True, header_style="bold magenta")
-    table.add_column("序号", style="dim", width=6)
-    table.add_column("设备名称", min_width=35)
-    table.add_column("驱动架构", width=18)
-    table.add_column("声道数", width=8)
-    table.add_column("推荐度", width=12)
-
-    for idx, name, api_name, channels in output_devices:
-        is_rec = (idx == recommended_idx)
-        rec_tag = "[bold green]★ 推荐 (虚拟)[/bold green]" if is_rec else ""
-        style = "bold green" if is_rec else ""
-        table.add_row(str(idx), name, api_name, str(channels), rec_tag, style=style)
-
-    console.print(table)
-
     default_out_dev = sd.default.device[1] if sd.default.device[1] >= 0 else output_devices[0][0]
     rec_target = recommended_idx if recommended_idx is not None else default_out_dev
-
-    rec_name = devices[rec_target]['name']
-    if recommended_idx is not None:
-        console.print(f"[bold green]✓ 自动选定推荐虚拟音频设备：[{rec_target}] {rec_name}[/bold green]")
-    else:
-        console.print(f"[bold green]✓ 自动选定默认音频输出设备：[{rec_target}] {rec_name}[/bold green]")
-
     return rec_target
 
 
@@ -332,17 +310,9 @@ def main():
     parser.add_argument("--discovery-port", type=int, default=DISCOVERY_PORT, help="UDP discovery port")
     args = parser.parse_args()
 
-    console.clear()
-    console.print(Panel.fit(
-        "[bold cyan]🎙️ PhoneMic 手机局域网麦克风电脑端服务[/bold cyan]\n"
-        "[dim]低延迟 UDP 原始 PCM 48kHz 音频接收服务[/dim]",
-        border_style="cyan"
-    ))
-
-    # 1. Device Selection
+    # 1. Device Selection (silent automatic)
     device_idx = list_and_select_device(cli_device_idx=args.device)
     dev_info = sd.query_devices(device_idx)
-    console.print(f"\n[green]✓ 已选定输出目标：[/green] [bold]{dev_info['name']}[/bold] (ID: {device_idx})\n")
 
     # 2. Setup Server
     server = AudioServer(device_idx=device_idx, port=args.port, discovery_port=args.discovery_port)
