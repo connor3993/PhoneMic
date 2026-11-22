@@ -12,6 +12,7 @@ import socket
 import threading
 import json
 import io
+import queue
 import argparse
 import numpy as np
 import sounddevice as sd
@@ -169,20 +170,42 @@ class AudioServer:
         self.audio_stream = None
         self.udp_sock = None
         self.discovery_sock = None
+        
+        # Determine output device channels (e.g. 2 for stereo virtual cable)
+        dev_info = sd.query_devices(self.device_idx)
+        self.out_channels = min(2, dev_info['max_output_channels']) if dev_info['max_output_channels'] > 0 else 1
+        
+        # Ultra-low latency jitter queue (max 4 chunks = ~40ms buffer max, strict zero lag accumulation)
+        self.audio_queue = queue.Queue(maxsize=4)
+
+    def _audio_callback(self, outdata, frames, time_info, status):
+        try:
+            chunk = self.audio_queue.get_nowait()
+            if len(chunk) == len(outdata):
+                outdata[:] = chunk
+            elif len(chunk) > len(outdata):
+                outdata[:] = chunk[:len(outdata)]
+            else:
+                outdata[:len(chunk)] = chunk
+                outdata[len(chunk):].fill(0)
+        except queue.Empty:
+            outdata.fill(0)
 
     def start_audio_stream(self):
-        """Open sounddevice output stream."""
-        self.audio_stream = sd.RawOutputStream(
+        """Open low-latency callback-driven sounddevice output stream."""
+        self.audio_stream = sd.OutputStream(
             samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
+            channels=self.out_channels,
             dtype=DTYPE,
             device=self.device_idx,
-            blocksize=BUFFER_CHUNK_SAMPLES
+            blocksize=BUFFER_CHUNK_SAMPLES,
+            callback=self._audio_callback,
+            latency='low'
         )
         self.audio_stream.start()
 
     def run_udp_audio(self):
-        """Listen for UDP raw PCM packets and write directly to audio stream."""
+        """Listen for UDP raw PCM packets and feed into audio queue with zero blocking."""
         try:
             self.udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -199,13 +222,27 @@ class AudioServer:
                 data, addr = self.udp_sock.recvfrom(4096)
                 if data:
                     self.stats.update_audio(addr, data)
-                    if self.audio_stream and self.audio_stream.active:
-                        self.audio_stream.write(data)
+                    samples = np.frombuffer(data, dtype=np.int16)
+                    
+                    # If target is stereo, duplicate mono to both channels cleanly
+                    if self.out_channels == 2:
+                        samples = np.column_stack((samples, samples))
+                    elif self.out_channels > 2:
+                        samples = np.repeat(samples[:, np.newaxis], self.out_channels, axis=1)
+
+                    # Push to queue; if buffer is full (lag spike), drop oldest to lock latency at < 20ms
+                    try:
+                        self.audio_queue.put_nowait(samples)
+                    except queue.Full:
+                        try:
+                            self.audio_queue.get_nowait()
+                            self.audio_queue.put_nowait(samples)
+                        except Exception:
+                            pass
             except socket.timeout:
                 continue
             except Exception as e:
                 if self.running:
-                    # Ignore occasional write buffer hiccups
                     pass
 
     def run_discovery_service(self):

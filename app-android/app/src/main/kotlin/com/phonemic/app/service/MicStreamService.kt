@@ -52,10 +52,10 @@ class MicStreamService : LifecycleService() {
         private val _gain = MutableStateFlow(1.0f)
         val gain: StateFlow<Float> = _gain.asStateFlow()
 
-        private val _nsEnabled = MutableStateFlow(true)
+        private val _nsEnabled = MutableStateFlow(false)
         val nsEnabled: StateFlow<Boolean> = _nsEnabled.asStateFlow()
 
-        private val _aecEnabled = MutableStateFlow(true)
+        private val _aecEnabled = MutableStateFlow(false)
         val aecEnabled: StateFlow<Boolean> = _aecEnabled.asStateFlow()
 
         fun startStreaming(context: Context, host: String, port: Int, name: String = "PC") {

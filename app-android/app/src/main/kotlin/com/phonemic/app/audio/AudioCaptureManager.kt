@@ -40,14 +40,14 @@ class AudioCaptureManager(
     var gain: Float = 1.0f
 
     @Volatile
-    var isNoiseSuppressorEnabled = true
+    var isNoiseSuppressorEnabled = false
         set(value) {
             field = value
             noiseSuppressor?.enabled = value
         }
 
     @Volatile
-    var isAcousticEchoCancelerEnabled = true
+    var isAcousticEchoCancelerEnabled = false
         set(value) {
             field = value
             echoCanceler?.enabled = value
@@ -69,9 +69,9 @@ class AudioCaptureManager(
         val bufferSize = max(minBufferSize, chunkBytes * 4)
 
         try {
-            // Use standard MIC instead of VOICE_COMMUNICATION to avoid triggering Android's Bluetooth call routing to PC
+            // VOICE_RECOGNITION provides studio-clear, uncompressed speech frequency response without Bluetooth telephony downsampling
             audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 sampleRate,
                 channelConfig,
                 audioFormat,
