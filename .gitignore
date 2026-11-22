@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.log
+
+# Android & Gradle
+.gradle/
+build/
+app/build/
+app-android/.gradle/
+app-android/build/
+app-android/app/build/
+local.properties
+*.iml
+.idea/
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# OS
+.DS_Store
+Thumbs.db

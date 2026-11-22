@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">PhoneMic</string>
+    <string name="notification_channel_name">PhoneMic 后台麦克风录音</string>
+    <string name="notification_channel_desc">保持麦克风在后台向电脑持续传输音频</string>
+    <string name="action_mute">静音</string>
+    <string name="action_unmute">取消静音</string>
+    <string name="action_stop">断开连接</string>
+</resources>
