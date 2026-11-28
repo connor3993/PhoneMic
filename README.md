@@ -29,6 +29,7 @@
 - **JSON 状态接口**：`GET http://localhost:9002/stats`，方便脚本或 Agent 监控。
 - **多种配对方式**：局域网 UDP 自动发现、终端二维码扫码、手动 IP / 端口。
 - **Android 前台服务**：支持熄屏和后台收音，通知栏提供静音与断开控制。
+- **中英双语界面**：App 右上角 `EN` / `中` 即时切换并保存；电脑端首次启动选择语言，配置保存到 `%APPDATA%\PhoneMic\config.json`。
 - **麦克风增益与电平显示**：App 内支持 0%–200% 增益和实时 dBFS 波形。
 - **自动匹配虚拟声卡**：电脑端优先寻找 VB-CABLE / VoiceMeeter 等虚拟音频设备，并将单声道 PCM 镜像到双声道输出。
 
@@ -84,6 +85,12 @@ py -3 -m venv .venv
 
 服务启动后会显示局域网 IP、二维码和实时电平仪表盘。
 
+#### 界面语言（可选）
+
+- Android App 点击右上角 `EN` / `中` 即可切换，选择会自动保存。
+- 电脑端首次启动选择 `1. English` 或 `2. 中文`；之后直接沿用上次选择。
+- 需要重新选择时运行 `server.py --reset-language`，也可以临时强制英文：`server.py --lang en`。
+
 #### 3. 安装 Android App
 
 项目根目录已经包含预编译的 `PhoneMic.apk`，也可以自行构建：
@@ -124,6 +131,8 @@ python server-pc/server.py `
 | `--port` | `9000` | 接收手机 PCM 音频的 UDP 端口 |
 | `--discovery-port` | `9001` | 局域网自动发现 UDP 端口 |
 | `--telemetry-port` | `9002` | HTTP 监控面板和 JSON API 端口 |
+| `--lang` | `auto` | 界面语言：`auto`、`zh`、`en`；显式指定会保存 |
+| `--reset-language` | 否 | 忽略已保存语言，本次重新选择 |
 
 ### 监控接口
 
@@ -138,14 +147,17 @@ http://localhost:9002/stats    # JSON 状态快照
 
 ```text
 PhoneMic/
-├── 启动电脑端服务.bat          # Windows 一键启动脚本
+├── 启动电脑端服务.bat          # 中文一键启动脚本
+├── start-pc-server-en.bat      # English 一键启动脚本
 ├── PhoneMic.apk               # 预编译 Android 安装包
+├── README.en.md               # 独立英文说明
 ├── server-pc/
 │   ├── server.py              # UDP 音频接收、虚拟声卡输出、监控服务
 │   ├── requirements.txt       # Python 依赖
 │   └── test_client.py         # 本地音频链路测试脚本
 └── app-android/
     ├── app/src/main/kotlin/com/phonemic/app/
+    │   ├── i18n/              # 中英双语上下文与语言持久化
     │   ├── audio/             # AudioRecord 采集
     │   ├── network/           # UDP 发包与局域网发现
     │   ├── service/           # 前台麦克风服务
@@ -203,6 +215,7 @@ The audio path uses **48 kHz / 16-bit mono PCM**. The PC backend plays it throug
 - **JSON status endpoint** at `GET http://localhost:9002/stats`.
 - **Three pairing modes**: LAN UDP discovery, terminal QR code, or manual IP / port.
 - **Android foreground service** for screen-off and background capture, with notification controls.
+- **Bilingual UI with in-app switching**: tap `EN` / `中` in the Android app; the PC terminal asks once and remembers the choice in `%APPDATA%\PhoneMic\config.json`.
 - **Gain and level meter** from 0% to 200% with real-time dBFS display.
 - **Virtual audio device detection** for VB-CABLE, VoiceMeeter, and similar devices; mono PCM is mirrored to stereo output.
 
@@ -258,6 +271,12 @@ After the virtual environment exists, you can also double-click `启动电脑端
 
 The server prints the LAN IP, pairing QR code, and live level meter.
 
+#### Language switching (optional)
+
+- Tap `EN` / `中` in the Android app's top bar; the choice is saved locally.
+- The PC server asks for `1. English` or `2. 中文` on first launch and reuses the choice.
+- Run `server.py --reset-language` to choose again, or `server.py --lang en` to force English.
+
 #### 3. Install the Android app
 
 A prebuilt `PhoneMic.apk` is included in the repository root. To build it yourself:
@@ -298,6 +317,8 @@ python server-pc/server.py `
 | `--port` | `9000` | UDP port receiving phone PCM audio |
 | `--discovery-port` | `9001` | UDP port for LAN discovery |
 | `--telemetry-port` | `9002` | HTTP dashboard and JSON API port |
+| `--lang` | `auto` | UI language: `auto`, `zh`, or `en`; explicit values are saved |
+| `--reset-language` | false | Ignore the saved language and choose again on this run |
 
 ### Monitoring
 
@@ -312,14 +333,17 @@ The payload includes connection state, client address, latency, jitter, packet l
 
 ```text
 PhoneMic/
-├── 启动电脑端服务.bat          # Windows one-click launcher
+├── 启动电脑端服务.bat          # Chinese one-click launcher
+├── start-pc-server-en.bat      # English one-click launcher
 ├── PhoneMic.apk               # Prebuilt Android APK
+├── README.en.md               # Standalone English README
 ├── server-pc/
 │   ├── server.py              # UDP receiver, virtual audio output, telemetry
 │   ├── requirements.txt       # Python dependencies
 │   └── test_client.py         # Local audio-path test client
 └── app-android/
     ├── app/src/main/kotlin/com/phonemic/app/
+    │   ├── i18n/              # In-app language context and persistence
     │   ├── audio/             # AudioRecord capture
     │   ├── network/           # UDP sender and LAN discovery
     │   ├── service/           # Foreground microphone service

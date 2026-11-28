@@ -1,6 +1,7 @@
 package com.phonemic.app
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonemic.app.i18n.LocaleManager
 import com.phonemic.app.network.DiscoveryClient
 import com.phonemic.app.service.MicStreamService
 import com.phonemic.app.ui.DiscoveryDialog
@@ -25,6 +27,10 @@ import com.phonemic.app.ui.theme.PhoneMicTheme
 
 class MainActivity : ComponentActivity() {
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleManager.wrapContext(newBase))
+    }
+
     private lateinit var discoveryClient: DiscoveryClient
 
     private val permissionLauncher = registerForActivityResult(
@@ -32,7 +38,7 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val recordAudioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
         if (!recordAudioGranted) {
-            Toast.makeText(this, "需要麦克风权限才能作为电脑麦克风", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.permission_mic_required), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -43,6 +49,8 @@ class MainActivity : ComponentActivity() {
         discoveryClient = DiscoveryClient(this)
 
         requestRequiredPermissions()
+
+        val currentLanguage = LocaleManager.getLanguage(this)
 
         setContent {
             PhoneMicTheme {
@@ -74,7 +82,16 @@ class MainActivity : ComponentActivity() {
                             },
                             onOpenDiscovery = { showDiscoveryDialog = true },
                             onConnect = { host, port, name -> connect(host, port, name) },
-                            onDisconnect = { disconnect() }
+                            onDisconnect = { disconnect() },
+                            currentLanguage = currentLanguage,
+                            onToggleLanguage = {
+                                LocaleManager.setLanguage(
+                                    this,
+                                    if (currentLanguage == LocaleManager.ZH) LocaleManager.EN else LocaleManager.ZH
+                                )
+                                MicStreamService.refreshNotification(this)
+                                recreate()
+                            }
                         )
 
                         if (showDiscoveryDialog) {
@@ -86,7 +103,7 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onManualConnect = { host, port ->
                                     showDiscoveryDialog = false
-                                    connect(host, port, "PC ($host)")
+                                    connect(host, port, getString(R.string.default_pc_name, host))
                                 },
                                 onDismiss = { showDiscoveryDialog = false }
                             )
@@ -116,12 +133,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         MicStreamService.startStreaming(this, host, port, name)
-        Toast.makeText(this, "正在连接至 $name ($host:$port)", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.connecting_to, name, host, port), Toast.LENGTH_SHORT).show()
     }
 
     private fun disconnect() {
         MicStreamService.stopStreaming(this)
-        Toast.makeText(this, "已断开连接", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.disconnected), Toast.LENGTH_SHORT).show()
     }
 
     override fun onResume() {

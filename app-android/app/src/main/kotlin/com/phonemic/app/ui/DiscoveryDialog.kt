@@ -12,8 +12,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.phonemic.app.R
 import com.phonemic.app.model.ServerDevice
 
 @Composable
@@ -30,7 +32,7 @@ fun DiscoveryDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("连接到电脑端", fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.connect_to_computer), fontWeight = FontWeight.Bold)
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -38,12 +40,12 @@ fun DiscoveryDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("局域网设备 (${devices.size})") }
+                        text = { Text(stringResource(R.string.lan_devices, devices.size)) }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("手动输入 IP") }
+                        text = { Text(stringResource(R.string.manual_ip)) }
                     )
                 }
 
@@ -61,7 +63,7 @@ fun DiscoveryDialog(
                                 CircularProgressIndicator(modifier = Modifier.size(32.dp))
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    "正在探测局域网中的电脑...\n请确保电脑端 server.py 已运行且手机连入同一 Wi-Fi",
+                                    stringResource(R.string.discovering),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -108,7 +110,7 @@ fun DiscoveryDialog(
                                             onClick = { onSelectDevice(dev.ip, dev.port, dev.name) },
                                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                         ) {
-                                            Text("连接")
+                                            Text(stringResource(R.string.connect_action))
                                         }
                                     }
                                 }
@@ -120,8 +122,8 @@ fun DiscoveryDialog(
                         OutlinedTextField(
                             value = manualIp,
                             onValueChange = { manualIp = it },
-                            label = { Text("电脑局域网 IP") },
-                            placeholder = { Text("例如 192.168.1.138") },
+                            label = { Text(stringResource(R.string.computer_lan_ip)) },
+                            placeholder = { Text(stringResource(R.string.ip_example)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -129,7 +131,7 @@ fun DiscoveryDialog(
                         OutlinedTextField(
                             value = manualPort,
                             onValueChange = { manualPort = it },
-                            label = { Text("UDP 端口") },
+                            label = { Text(stringResource(R.string.udp_port)) },
                             placeholder = { Text("9000") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -145,7 +147,7 @@ fun DiscoveryDialog(
                             modifier = Modifier.fillMaxWidth(),
                             enabled = manualIp.isNotBlank()
                         ) {
-                            Text("立即连接")
+                            Text(stringResource(R.string.connect_now))
                         }
                     }
                 }
@@ -154,7 +156,7 @@ fun DiscoveryDialog(
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

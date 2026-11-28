@@ -17,6 +17,9 @@ import json
 import io
 import queue
 import argparse
+import locale
+import os
+from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 import numpy as np
@@ -37,6 +40,166 @@ BYTES_PER_SAMPLE = 2  # 16-bit = 2 bytes
 BUFFER_CHUNK_SAMPLES = 480  # 10ms at 48kHz = 480 samples = 960 bytes
 
 console = Console()
+
+CURRENT_LANG = "en"
+
+TRANSLATIONS = {
+    "zh": {
+        "status_active": "🟢 手机已连接，正在收音中",
+        "status_waiting": "🟡 等待手机连接...",
+        "lan_ip": "电脑局域网 IP:",
+        "audio_port": "音频接收端口:",
+        "output_device": "音频输出设备:",
+        "connection_status": "连接状态:",
+        "current_client": "当前客户端:",
+        "latency": "实时端到端延迟:",
+        "jitter_loss": "网络抖动 / 丢包:",
+        "drift": "时钟漂移自动纠偏:",
+        "bitrate": "实时接收码率:",
+        "volume": "实时音量电平:",
+        "web_console": "监控控制台 Web:",
+        "qr_title": "手机扫码极速连接",
+        "dashboard_title": "实时监控仪表盘",
+        "main_title": "PhoneMic 电脑端麦克风网关 v1.1",
+        "exit_hint": "(按 Ctrl+C 退出)",
+        "subtitle": "提示：在 Discord / 微信 / 录音软件中将输入设备设为该虚拟声卡即可直接使用",
+        "stopping": "正在停止服务...",
+        "stopped": "服务已安全退出。",
+        "audio_start_failed": "启动音频流失败：{error}",
+        "udp_start_failed": "UDP 接收服务启动失败（端口 {port} 可能已被占用）：{error}",
+        "none": "无",
+        "fast": "极速",
+        "packet_loss": "丢包: {count}",
+        "cumulative": "累计: {count} 包",
+        "drift_lock": "(锁定 ≤ 20ms)",
+        "times": "次",
+        "packets": "包",
+        "frames": "帧",
+        "seconds": "秒",
+    },
+    "en": {
+        "status_active": "🟢 Phone connected, streaming",
+        "status_waiting": "🟡 Waiting for phone...",
+        "lan_ip": "PC LAN IP:",
+        "audio_port": "Audio receive port:",
+        "output_device": "Audio output device:",
+        "connection_status": "Connection status:",
+        "current_client": "Current client:",
+        "latency": "End-to-end latency:",
+        "jitter_loss": "Network jitter / packet loss:",
+        "drift": "Clock-drift corrections:",
+        "bitrate": "Live receive bitrate:",
+        "volume": "Live audio level:",
+        "web_console": "Web console:",
+        "qr_title": "Scan to connect",
+        "dashboard_title": "Live dashboard",
+        "main_title": "PhoneMic PC Microphone Gateway v1.1",
+        "exit_hint": "(Ctrl+C to quit)",
+        "subtitle": "Tip: select this virtual cable as the input device in Discord / WeChat / your recorder.",
+        "stopping": "Stopping service...",
+        "stopped": "Service stopped safely.",
+        "audio_start_failed": "Failed to start audio stream: {error}",
+        "udp_start_failed": "UDP receiver failed to start (port {port} may be in use): {error}",
+        "none": "None",
+        "fast": "fast",
+        "packet_loss": "lost: {count}",
+        "cumulative": "total: {count} packets",
+        "drift_lock": "(locked ≤ 20ms)",
+        "times": "times",
+        "packets": "packets",
+        "frames": "frames",
+        "seconds": "sec",
+    },
+}
+
+
+def tr(key, **kwargs):
+    """Translate a user-facing CLI string using the active language."""
+    table = TRANSLATIONS.get(CURRENT_LANG, TRANSLATIONS["en"])
+    value = table.get(key) or TRANSLATIONS["en"].get(key, key)
+    return value.format(**kwargs) if kwargs else value
+
+
+def get_config_path():
+    """Return the per-user settings path for PhoneMic."""
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming")
+    else:
+        base = os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")
+    return Path(base) / "PhoneMic" / "config.json"
+
+
+def detect_system_language():
+    probe = " ".join(filter(None, [
+        os.environ.get("LC_ALL"),
+        os.environ.get("LC_MESSAGES"),
+        os.environ.get("LANG"),
+    ]))
+    if not probe:
+        try:
+            probe = " ".join(filter(None, locale.getlocale()))
+        except Exception:
+            probe = ""
+    probe = probe.lower()
+    return "zh" if probe.startswith("zh") or "chinese" in probe else "en"
+
+
+def load_saved_language():
+    try:
+        data = json.loads(get_config_path().read_text(encoding="utf-8"))
+        value = data.get("language")
+        return value if value in ("zh", "en") else None
+    except Exception:
+        return None
+
+
+def save_language(lang):
+    try:
+        path = get_config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"language": lang}, indent=2) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+def choose_language():
+    default = detect_system_language()
+    default_label = "English" if default == "en" else "中文"
+    console.print("[bold cyan]PhoneMic language / 语言[/bold cyan]")
+    console.print("1. English\n2. 中文")
+    console.print(f"Press Enter for default / 回车使用默认：{default_label}")
+    try:
+        choice = input("> ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return default
+    if choice in ("1", "en", "english"):
+        return "en"
+    if choice in ("2", "zh", "chinese", "中文"):
+        return "zh"
+    return default
+
+
+def configure_language(requested="auto", reset=False):
+    """Resolve language from CLI/config, prompting once on first run."""
+    global CURRENT_LANG
+    if requested in ("zh", "en"):
+        CURRENT_LANG = requested
+        save_language(requested)
+        return CURRENT_LANG
+
+    saved = None if reset else load_saved_language()
+    if saved in ("zh", "en"):
+        CURRENT_LANG = saved
+        return CURRENT_LANG
+
+    if sys.stdin.isatty():
+        CURRENT_LANG = choose_language()
+        save_language(CURRENT_LANG)
+    else:
+        CURRENT_LANG = detect_system_language()
+        save_language(CURRENT_LANG)
+    return CURRENT_LANG
+
 
 def get_best_lan_ip():
     """Detect the real local Wi-Fi / LAN IP address, excluding VPN/Clash TUN/virtual adapters."""
@@ -203,7 +366,7 @@ class Stats:
         """Snapshot dictionary for telemetry API."""
         now = time.time()
         is_active = (now - self.last_packet_time < 2.0) and (self.last_packet_time > 0)
-        client_str = f"{self.connected_client[0]}:{self.connected_client[1]}" if (self.connected_client and is_active) else "无"
+        client_str = f"{self.connected_client[0]}:{self.connected_client[1]}" if (self.connected_client and is_active) else tr("none")
         total_p = self.packets_total + self.packets_lost
         loss_pct = (self.packets_lost / total_p * 100.0) if total_p > 0 else 0.0
 
@@ -357,6 +520,53 @@ HTML_DASHBOARD = """<!DOCTYPE html>
 </html>
 """
 
+DASHBOARD_EN_REPLACEMENTS = [
+    ("PhoneMic 实时监控控制台", "PhoneMic Live Monitoring Console"),
+    ("🎙️ PhoneMic 实时性能与健康监控", "🎙️ PhoneMic Live Performance & Health"),
+    ("等待连接...", "Waiting for connection..."),
+    ("等待连接", "Waiting for connection"),
+    ("端到端实时延迟", "End-to-end latency"),
+    ("🟢 极速无感级别", "🟢 Ultra-low latency"),
+    ("网络抖动 (Jitter)", "Network jitter"),
+    ("RFC 3550 实时评估", "RFC 3550 live estimate"),
+    ("丢包率", "Packet loss"),
+    ("丢失 0 包", "0 packets lost"),
+    ("时钟漂移抗积压纠偏", "Clock-drift corrections"),
+    ("0 次", "0 times"),
+    ("锁定延时 ≤ 20ms", "Latency locked ≤ 20ms"),
+    ("实时麦克风音量 (VU Meter)", "Live microphone level (VU meter)"),
+    ("当前连接手机", "Connected phone"),
+    ("输出目标设备", "Output device"),
+    ("实时网络码率", "Live bitrate"),
+    ("累计接收包数", "Packets received"),
+    ("0 包", "0 packets"),
+    ("队列缓冲延时", "Queue delay"),
+    ("10.0 ms (1 帧)", "10.0 ms (1 frame)"),
+    ("服务运行时间", "Uptime"),
+    ("0 秒", "0 sec"),
+    ("REST API 接口", "REST API"),
+    ("JSON 格式，供脚本与监控调用", "JSON for scripts and monitoring"),
+    ("🟢 手机收音中", "🟢 Phone streaming"),
+    ("🟡 等待连接", "🟡 Waiting for connection"),
+    ("丢失 ", "Lost "),
+    (" / 接收 ", " / received "),
+    (" 次", " times"),
+    (" 包", " packets"),
+    (" 帧)", " frames)"),
+    (" 秒", " sec"),
+]
+
+
+def build_dashboard_html(lang=None):
+    """Return the dashboard in the active language without duplicating markup."""
+    lang = lang or CURRENT_LANG
+    if lang == "zh":
+        return HTML_DASHBOARD
+    html = HTML_DASHBOARD.replace('<html lang="zh-CN">', '<html lang="en">')
+    for source, target in DASHBOARD_EN_REPLACEMENTS:
+        html = html.replace(source, target)
+    return html
+
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
@@ -389,7 +599,7 @@ class TelemetryHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
         else:
-            data = HTML_DASHBOARD.encode('utf-8')
+            data = build_dashboard_html(CURRENT_LANG).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.send_header('Content-Length', str(len(data)))
@@ -454,7 +664,7 @@ class AudioServer:
             self.udp_sock.bind(("0.0.0.0", self.port))
             self.udp_sock.settimeout(0.5)
         except Exception as e:
-            console.print(f"[bold red]UDP 接收服务启动失败（端口 {self.port} 可能已被占用）：{e}[/bold red]")
+            console.print(f"[bold red]{tr('udp_start_failed', port=self.port, error=e)}[/bold red]")
             self.running = False
             return
 
@@ -609,7 +819,19 @@ def main():
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="UDP audio port")
     parser.add_argument("--discovery-port", type=int, default=DISCOVERY_PORT, help="UDP discovery port")
     parser.add_argument("--telemetry-port", type=int, default=TELEMETRY_PORT, help="HTTP telemetry port")
+    parser.add_argument(
+        "--lang",
+        choices=("auto", "zh", "en"),
+        default="auto",
+        help="UI language: auto uses saved/system language; zh or en overrides and saves it"
+    )
+    parser.add_argument(
+        "--reset-language",
+        action="store_true",
+        help="Ignore the saved language and choose again on this run"
+    )
     args = parser.parse_args()
+    configure_language(args.lang, reset=args.reset_language)
 
     # 1. Device Selection (silent automatic)
     device_idx = list_and_select_device(cli_device_idx=args.device)
@@ -627,7 +849,7 @@ def main():
     try:
         server.start_audio_stream()
     except Exception as e:
-        console.print(f"[bold red]启动音频流失败：{e}[/bold red]")
+        console.print(f"[bold red]{tr('audio_start_failed', error=e)}[/bold red]")
         sys.exit(1)
 
     server.running = True
@@ -649,30 +871,30 @@ def main():
                 is_active = (snap["status"] == "active")
 
                 status_color = "bold green" if is_active else "bold yellow"
-                status_text = f"[{status_color}]{'🟢 手机已连接，正在收音中' if is_active else '🟡 等待手机连接...'}[/{status_color}]"
+                status_text = f"[{status_color}]{tr('status_active' if is_active else 'status_waiting')}[/{status_color}]"
 
                 vu_bar = build_vu_bar(snap["current_db"], snap["peak_db"], width=26)
                 db_display = f"{snap['current_db']:5.1f} dB" if is_active else " -inf dB"
 
-                lat_str = f"[bold green]{snap['latency_ms']:.1f} ms (极速)[/bold green]" if is_active else "[dim]-- ms[/dim]"
+                lat_str = f"[bold green]{snap['latency_ms']:.1f} ms ({tr('fast')})[/bold green]" if is_active else "[dim]-- ms[/dim]"
                 jit_str = f"±{snap['jitter_ms']:.1f} ms" if is_active else "±-- ms"
-                loss_str = f"{snap['packet_loss_pct']:.2f}% (丢包: {snap['packets_lost']})"
+                loss_str = f"{snap['packet_loss_pct']:.2f}% ({tr('packet_loss', count=snap['packets_lost'])})"
 
                 info_table = Table.grid(padding=(0, 2))
                 info_table.add_column(style="bold cyan")
                 info_table.add_column()
 
-                info_table.add_row("电脑局域网 IP:", f"[bold white]{server.lan_ip}[/bold white]")
-                info_table.add_row("音频接收端口:", f"[bold white]{server.port}[/bold white]")
-                info_table.add_row("音频输出设备:", f"[bold green]{dev_info['name']}[/bold green]")
-                info_table.add_row("连接状态:", status_text)
-                info_table.add_row("当前客户端:", f"[white]{snap['client']}[/white]")
-                info_table.add_row("实时端到端延迟:", lat_str)
-                info_table.add_row("网络抖动 / 丢包:", f"[white]{jit_str}[/white] / [white]{loss_str}[/white]")
-                info_table.add_row("时钟漂移自动纠偏:", f"[bold green]{snap['drift_corrections']} 次[/bold green] (锁定 ≤ 20ms)")
-                info_table.add_row("实时接收码率:", f"[white]{snap['bitrate_kbps']:5.1f} kbps[/white] (累计: {snap['packets_received']} 包)")
-                info_table.add_row("实时音量电平:", f"{vu_bar} [bold]{db_display}[/bold]")
-                info_table.add_row("监控控制台 Web:", f"[link=http://localhost:{server.telemetry_port}]http://localhost:{server.telemetry_port}[/link]")
+                info_table.add_row(tr("lan_ip"), f"[bold white]{server.lan_ip}[/bold white]")
+                info_table.add_row(tr("audio_port"), f"[bold white]{server.port}[/bold white]")
+                info_table.add_row(tr("output_device"), f"[bold green]{dev_info['name']}[/bold green]")
+                info_table.add_row(tr("connection_status"), status_text)
+                info_table.add_row(tr("current_client"), f"[white]{snap['client']}[/white]")
+                info_table.add_row(tr("latency"), lat_str)
+                info_table.add_row(tr("jitter_loss"), f"[white]{jit_str}[/white] / [white]{loss_str}[/white]")
+                info_table.add_row(tr("drift"), f"[bold green]{snap['drift_corrections']} {tr('times')}[/bold green] {tr('drift_lock')}")
+                info_table.add_row(tr("bitrate"), f"[white]{snap['bitrate_kbps']:5.1f} kbps[/white] ({tr('cumulative', count=snap['packets_received'])})")
+                info_table.add_row(tr("volume"), f"{vu_bar} [bold]{db_display}[/bold]")
+                info_table.add_row(tr("web_console"), f"[link=http://localhost:{server.telemetry_port}]http://localhost:{server.telemetry_port}[/link]")
 
                 grid = Table.grid(expand=True, padding=(0, 2))
                 grid.add_column(ratio=1)
@@ -680,13 +902,13 @@ def main():
 
                 qr_panel = Panel(
                     ascii_qr + f"\n[dim center]{qr_data}[/dim center]",
-                    title="[bold yellow]手机扫码极速连接[/bold yellow]",
+                    title=f"[bold yellow]{tr('qr_title')}[/bold yellow]",
                     border_style="yellow"
                 )
 
                 dash_panel = Panel(
                     info_table,
-                    title="[bold cyan]实时监控仪表盘[/bold cyan]",
+                    title=f"[bold cyan]{tr('dashboard_title')}[/bold cyan]",
                     border_style="cyan"
                 )
 
@@ -694,8 +916,8 @@ def main():
 
                 main_panel = Panel(
                     grid,
-                    title="[bold green]PhoneMic 电脑端麦克风网关 v1.1[/bold green] (按 Ctrl+C 退出)",
-                    subtitle="[dim]提示：在 Discord / 微信 / 录音软件中将输入设备设为该虚拟声卡即可直接使用[/dim]",
+                    title=f"[bold green]{tr('main_title')}[/bold green] {tr('exit_hint')}",
+                    subtitle=f"[dim]{tr('subtitle')}[/dim]",
                     border_style="blue"
                 )
 
@@ -703,7 +925,7 @@ def main():
                 time.sleep(0.1)
 
     except KeyboardInterrupt:
-        console.print("\n[yellow]正在停止服务...[/yellow]")
+        console.print(f"\n[yellow]{tr('stopping')}[/yellow]")
     finally:
         server.running = False
         if server.http_server:
@@ -714,7 +936,7 @@ def main():
         if server.audio_stream:
             server.audio_stream.stop()
             server.audio_stream.close()
-        console.print("[green]服务已安全退出。[/green]")
+        console.print(f"[green]{tr('stopped')}[/green]")
 
 
 if __name__ == "__main__":

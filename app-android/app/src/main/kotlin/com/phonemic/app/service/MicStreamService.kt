@@ -15,6 +15,7 @@ import androidx.lifecycle.LifecycleService
 import com.phonemic.app.MainActivity
 import com.phonemic.app.R
 import com.phonemic.app.audio.AudioCaptureManager
+import com.phonemic.app.i18n.LocaleManager
 import com.phonemic.app.model.ServerDevice
 import com.phonemic.app.network.UdpAudioSender
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,7 @@ class MicStreamService : LifecycleService() {
         const val ACTION_START = "com.phonemic.app.action.START"
         const val ACTION_STOP = "com.phonemic.app.action.STOP"
         const val ACTION_TOGGLE_MUTE = "com.phonemic.app.action.TOGGLE_MUTE"
+        const val ACTION_REFRESH_NOTIFICATION = "com.phonemic.app.action.REFRESH_NOTIFICATION"
 
         const val EXTRA_HOST = "extra_host"
         const val EXTRA_PORT = "extra_port"
@@ -86,6 +88,14 @@ class MicStreamService : LifecycleService() {
             context.startService(intent)
         }
 
+        fun refreshNotification(context: Context) {
+            if (!_isStreaming.value) return
+            val intent = Intent(context, MicStreamService::class.java).apply {
+                action = ACTION_REFRESH_NOTIFICATION
+            }
+            context.startService(intent)
+        }
+
         fun setGain(value: Float) {
             _gain.value = value
             activeManager?.gain = value
@@ -107,6 +117,10 @@ class MicStreamService : LifecycleService() {
     private var sender: UdpAudioSender? = null
     private var captureManager: AudioCaptureManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleManager.wrapContext(newBase))
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -131,6 +145,10 @@ class MicStreamService : LifecycleService() {
                 val newMuted = !_isMuted.value
                 _isMuted.value = newMuted
                 captureManager?.isMuted = newMuted
+                updateNotification()
+            }
+            ACTION_REFRESH_NOTIFICATION -> {
+                createNotificationChannel()
                 updateNotification()
             }
         }
@@ -163,7 +181,7 @@ class MicStreamService : LifecycleService() {
             _connectedServer.value = ServerDevice(name = name, ip = host, port = port)
 
             val notification = buildNotification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 startForeground(
                     NOTIFICATION_ID,
                     notification,
@@ -198,14 +216,18 @@ class MicStreamService : LifecycleService() {
         sender = null
     }
 
+    private fun localizedString(resId: Int, vararg args: Any): String {
+        return LocaleManager.wrapContext(this).getString(resId, *args)
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                getString(R.string.notification_channel_name),
+                localizedString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = getString(R.string.notification_channel_desc)
+                description = localizedString(R.string.notification_channel_desc)
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
@@ -241,14 +263,16 @@ class MicStreamService : LifecycleService() {
         val server = _connectedServer.value
         val isMuted = _isMuted.value
 
-        val title = if (isMuted) "PhoneMic 电脑麦克风 (已静音)" else "PhoneMic 电脑麦克风录音中"
+        val title = localizedString(
+            if (isMuted) R.string.notification_title_muted else R.string.notification_title_streaming
+        )
         val content = if (server != null) {
-            "正在向 ${server.name} (${server.ip}:${server.port}) 发送音频"
+            localizedString(R.string.notification_content_with_server, server.name, server.ip, server.port)
         } else {
-            "正在发送音频"
+            localizedString(R.string.notification_content)
         }
 
-        val muteActionTitle = if (isMuted) getString(R.string.action_unmute) else getString(R.string.action_mute)
+        val muteActionTitle = if (isMuted) localizedString(R.string.action_unmute) else localizedString(R.string.action_mute)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
@@ -257,7 +281,7 @@ class MicStreamService : LifecycleService() {
             .setOngoing(true)
             .setContentIntent(pendingOpenApp)
             .addAction(android.R.drawable.ic_media_pause, muteActionTitle, pendingMute)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.action_stop), pendingStop)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, localizedString(R.string.action_stop), pendingStop)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }

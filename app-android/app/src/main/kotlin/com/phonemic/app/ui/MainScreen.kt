@@ -21,12 +21,16 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phonemic.app.R
+import com.phonemic.app.i18n.LocaleManager
 import com.phonemic.app.model.ServerDevice
 import com.phonemic.app.service.MicStreamService
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,7 +40,9 @@ fun MainScreen(
     onStartScanQr: () -> Unit,
     onOpenDiscovery: () -> Unit,
     onConnect: (host: String, port: Int, name: String) -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    currentLanguage: String,
+    onToggleLanguage: () -> Unit
 ) {
     val context = LocalContext.current
     val isStreaming by MicStreamService.isStreaming.collectAsStateWithLifecycle()
@@ -61,7 +67,11 @@ fun MainScreen(
                             color = if (isStreaming) Color(0xFF1B5E20) else MaterialTheme.colorScheme.surfaceVariant
                         ) {
                             Text(
-                                text = if (isStreaming) (if (isMuted) "已静音" else "运行中") else "待连接",
+                                text = if (isStreaming) {
+                                    if (isMuted) stringResource(R.string.status_muted) else stringResource(R.string.status_streaming)
+                                } else {
+                                    stringResource(R.string.status_waiting)
+                                },
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 fontSize = 11.sp,
                                 color = if (isStreaming) Color(0xFFA5D6A7) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -71,10 +81,13 @@ fun MainScreen(
                 },
                 actions = {
                     IconButton(onClick = onOpenDiscovery) {
-                        Icon(Icons.Default.Search, contentDescription = "发现电脑")
+                        Icon(Icons.Default.Search, contentDescription = stringResource(R.string.discover_computer))
                     }
                     IconButton(onClick = onStartScanQr) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "扫码")
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = stringResource(R.string.scan_qr))
+                    }
+                    TextButton(onClick = onToggleLanguage) {
+                        Text(if (currentLanguage == LocaleManager.ZH) "EN" else "中")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -118,13 +131,13 @@ fun MainScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isStreaming && connectedServer != null) connectedServer!!.name else "电脑端未连接",
+                            text = if (isStreaming && connectedServer != null) connectedServer!!.name else stringResource(R.string.computer_not_connected),
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
                             text = if (isStreaming && connectedServer != null) "${connectedServer!!.ip}:${connectedServer!!.port} (48kHz Mono)"
-                            else "请扫码或通过局域网发现连接",
+                            else stringResource(R.string.connect_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -138,14 +151,14 @@ fun MainScreen(
                             ),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text("断开")
+                            Text(stringResource(R.string.disconnect))
                         }
                     } else {
                         Button(
                             onClick = onOpenDiscovery,
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                         ) {
-                            Text("连接")
+                            Text(stringResource(R.string.connect))
                         }
                     }
                 }
@@ -168,9 +181,9 @@ fun MainScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("实时电平监控", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.live_level), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
-                            text = if (!isStreaming) "OFF" else if (isMuted) "MUTED" else String.format("%.1f dB", currentDb),
+                            text = if (!isStreaming) stringResource(R.string.status_off) else if (isMuted) stringResource(R.string.status_muted_upper) else String.format(Locale.getDefault(), "%.1f dB", currentDb),
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = if (!isStreaming) Color.Gray else if (isMuted) Color.Red else Color(0xFF00C853)
@@ -205,9 +218,9 @@ fun MainScreen(
             )
 
             Text(
-                text = if (!isStreaming) "点击开始连接电脑"
-                else if (isMuted) "麦克风已静音 (点击取消静音)"
-                else "正在收音中 (点击快速静音)",
+                text = if (!isStreaming) stringResource(R.string.click_to_connect)
+                else if (isMuted) stringResource(R.string.mic_muted_hint)
+                else stringResource(R.string.streaming_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 color = if (!isStreaming) MaterialTheme.colorScheme.onSurfaceVariant
@@ -227,7 +240,7 @@ fun MainScreen(
                         .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("音频调节与硬件降噪", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.audio_controls), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
                     // Gain Slider
                     Column {
@@ -235,7 +248,7 @@ fun MainScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("麦克风增益 (Gain)", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.mic_gain), style = MaterialTheme.typography.bodyMedium)
                             Text("${(gain * 100).roundToInt()}%", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         }
                         Slider(
@@ -255,8 +268,8 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Android 原生硬件降噪 (NS)", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                            Text("利用手机专用芯片降噪算法过滤环境风噪、键盘与底噪", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.noise_suppression), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.noise_suppression_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Switch(
@@ -272,8 +285,8 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("回声消除 (AEC)", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                            Text("消除室内声场扬声器自激与回环回声", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.echo_cancellation), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.echo_cancellation_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Switch(
@@ -299,7 +312,7 @@ fun MainScreen(
                 ) {
                     Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("局域网探测")
+                    Text(stringResource(R.string.lan_discovery))
                 }
                 Button(
                     onClick = onStartScanQr,
@@ -309,7 +322,7 @@ fun MainScreen(
                 ) {
                     Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("扫码配对")
+                    Text(stringResource(R.string.scan_pair))
                 }
             }
 
@@ -423,9 +436,9 @@ fun BigMicButton(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = when {
-                        !isStreaming -> "开始收音"
-                        isMuted -> "已静音"
-                        else -> "静音"
+                        !isStreaming -> stringResource(R.string.start_streaming)
+                        isMuted -> stringResource(R.string.status_muted)
+                        else -> stringResource(R.string.mute)
                     },
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
